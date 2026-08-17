@@ -89,4 +89,79 @@ end
 #   run_precompile_tasks
 # end
 
+# Monkey Patching from react on rails to add a new configuration
+# I like starting react using ruby mine built in debugger setup using debase and such
+# I rather not stray away from the Rubymine IDE experience
+# So monkey patching to start react on rails dev (using procfiles)
+# but my custom procfile will not start rails at all
+module ReactOnRails
+  module Dev
+    class ServerManager
+      class << self
+# rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity
+        def run_from_command_line(args = ARGV)
+          # Get the command early to check for help/kill before running hooks
+          # We need to do this before OptionParser processes flags like -h/--help
+          # Skip arguments that are values for flags (e.g., "hello_world" after "--route")
+          command = extract_command_from_args(args)
+
+          # Check if help flags are present in args (before OptionParser processes them)
+          help_requested = args.any? { |arg| HELP_FLAGS.include?(arg) }
+
+          options = parse_cli_options(args)
+
+          # Run precompile hook once before starting any mode (except kill/clean/help)
+          # Then set environment variable to prevent duplicate execution in spawned processes.
+          # Note: We always set SHAKAPACKER_SKIP_PRECOMPILE_HOOK=true (even when no hook is configured)
+          # to provide a consistent signal that bin/dev is managing the precompile lifecycle.
+          # This allows custom scripts to detect bin/dev's presence and adjust behavior accordingly.
+          unless %w[kill clean help].include?(command) || help_requested
+            run_precompile_hook_if_present
+            ENV["SHAKAPACKER_SKIP_PRECOMPILE_HOOK"] = "true"
+          end
+
+          # Main execution
+          case command
+          when "production-assets", "prod"
+            start(:production_like, nil, verbose: options[:verbose], route: options[:route],
+                  rails_env: options[:rails_env],
+                  skip_database_check: options[:skip_database_check],
+                  open_browser: options[:open_browser],
+                  open_browser_once: options[:open_browser_once])
+          when "static"
+            start(:static, "Procfile.dev-static-assets", verbose: options[:verbose], route: options[:route],
+                  skip_database_check: options[:skip_database_check],
+                  open_browser: options[:open_browser],
+                  open_browser_once: options[:open_browser_once])
+          when "kill"
+            kill_processes
+          when "clean"
+            clean_generated_assets_and_caches
+          when "help"
+            show_help
+          when "test-watch"
+            run_test_watch(test_watch_mode: options[:test_watch_mode])
+          when "hmr", nil
+            start(:development, "Procfile.dev", verbose: options[:verbose], route: options[:route],
+                  skip_database_check: options[:skip_database_check],
+                  open_browser: options[:open_browser],
+                  open_browser_once: options[:open_browser_once])
+          when "no-rails"
+            start(:development, "Procfile.dev-no-rails", verbose: options[:verbose], route: options[:route],
+                  skip_database_check: options[:skip_database_check],
+                  open_browser: options[:open_browser],
+                  open_browser_once: options[:open_browser_once])
+
+          else
+            puts "Unknown argument: #{command}"
+            puts "Run 'dev help' for usage information"
+            exit 1
+          end
+        end
+      end
+    end
+  end
+end
+# rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity
+
 ReactOnRails::Dev::ServerManager.run_from_command_line(argv_with_defaults)
