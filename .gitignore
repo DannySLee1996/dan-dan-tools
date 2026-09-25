@@ -47,4 +47,6 @@ ssr-generated
 .env
 
 # git ignore rubymine folder
-.idea
+.idea/*
+# but keep run configurations
+!.idea/runConfigurations/
